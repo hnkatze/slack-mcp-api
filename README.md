@@ -7,7 +7,7 @@ MCP server for Slack with **full API coverage and LLM-aware ergonomics**. Canvas
 Most Slack MCPs are thin API wrappers. That isn't enough for an LLM. It needs:
 
 1. **To know who "I" am** — without that it can't tell *my* messages from anyone else's
-2. **Names, not opaque IDs** — `<@U03NMFNURJM>` is useless; `@Gustavo Martinez` is workable
+2. **Names, not opaque IDs** — `<@U01ABCDEFGH>` is useless; `@Jane Doe` is workable
 3. **Compact payloads** — Slack returns 12 thumbnail variants per image, blocks, edited metadata… 80% noise
 4. **One-call answers to common questions** — *"the DM with X"* shouldn't require listing 70 IMs
 
@@ -179,12 +179,51 @@ Pointing to a local build:
 }
 ```
 
-## Recommended flow for clients
+## Context for LLMs
 
-1. Call `slack_whoami` once at session start. Cache the `user_id`.
-2. To work with a person: `slack_get_dm_with(user: "Gustavo Martinez")` → `channel_id`.
-3. Read the DM: `slack_get_history(channel: <channel_id>)` → compact payload, names resolved, `is_mine` flagged.
-4. To act on a specific message, use the `ts` from the compact response.
+> This section is written for an LLM consuming this MCP. If you are an agent and you have these tools available, read this before making your first call.
+
+**Identity model**
+
+- "I" / "me" / "my messages" refers to the human behind the **user token** (`SLACK_USER_TOKEN`). Always.
+- The **bot token** (`SLACK_BOT_TOKEN`) represents an app, not a person. It is used internally for write actions and channel management — you do not need to reason about it.
+- `slack_whoami` returns both identities; the `user_token_identity.id` is the one you compare against to set `is_mine`.
+
+**Standard call order**
+
+1. **Always** call `slack_whoami` first in a new session. Cache the `user_id` mentally — every subsequent `is_mine` flag is meaningful only against that id.
+2. To address a person by name, do **not** list users and grep. Call `slack_get_dm_with(user: "Jane Doe")` and use the returned `channel_id` directly.
+3. To resolve a name to a user record (without opening a DM), call `slack_resolve_user(query: "Jane Doe" | "jane@acme.com" | "U01ABCDEFGH")`.
+4. Read messages via `slack_get_history` / `slack_get_thread` / `slack_search_messages`. They return compact payloads by default — names already resolved, `is_mine` already flagged, mentions inlined as `@Name`.
+5. To act on a specific message (edit, delete, react, reply in thread), use the `ts` you got from the compact read. `ts` is the message's primary key in Slack.
+
+**What "compact" gives you**
+
+- `text` — `<@Uxxx>` mentions are replaced with `@Name` inline so you can quote the message directly without post-processing.
+- `user` — display name, not the id.
+- `is_mine` — present and `true` only when the message is yours; absent otherwise.
+- `files` and `reactions` are slimmed (no thumbnails, no block metadata).
+- Pass `compact: false` when you genuinely need the raw response (e.g., debugging Slack-specific block kit content). Default is `true`.
+
+**Pitfalls to avoid**
+
+- Do **not** assume a thread exists just because a message has replies; check `reply_count` or call `slack_get_thread` and handle empty results.
+- Do **not** call `slack_open_dm` to *read* a DM you suspect already exists — that creates one if none is there. Use `slack_get_dm_with` instead; it prefers the existing channel.
+- Do **not** try to search messages with only the bot token. Slack does not allow it. The user token is required for `slack_search_messages`.
+- IDs are case-sensitive. Channel ids start with `C` (public), `G` (private), `D` (DM), `MP` is multi-party DM. User ids start with `U`, `W`, or `B`.
+- The user directory is cached in memory after the first name lookup. If a user is added/removed during the session, restart the server to refresh.
+
+**Token capabilities at a glance**
+
+| Action | Bot (`xoxb-`) | User (`xoxp-`) |
+|---|---|---|
+| Send / edit / delete messages, channels, files | Yes | — |
+| Read history (channels the bot is in) | Yes | Yes |
+| Search messages | No (Slack restriction) | Yes |
+| Read full canvas content | Limited | Yes |
+| Resolve user names from directory | Yes | Yes |
+
+If `SLACK_USER_TOKEN` is missing, the server falls back to the bot token everywhere — search and full canvas read will fail.
 
 ## Notes
 
