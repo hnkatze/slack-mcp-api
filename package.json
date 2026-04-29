@@ -1,0 +1,50 @@
+{
+  "name": "slack-mcp-api",
+  "version": "0.1.0",
+  "description": "MCP server for Slack with full API coverage and LLM-aware ergonomics — canvases, messages, channels, search, files",
+  "type": "module",
+  "bin": {
+    "slack-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "slack",
+    "model-context-protocol",
+    "canvas",
+    "slack-api"
+  ],
+  "license": "MIT",
+  "author": "hnkatze",
+  "scripts": {
+    "build": "tsc && node -e \"import('node:fs').then(fs => fs.chmodSync('dist/index.js', 0o755))\"",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@slack/web-api": "^7.8.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hnkatze/slack-mcp-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hnkatze/slack-mcp-api/issues"
+  },
+  "homepage": "https://github.com/hnkatze/slack-mcp-api#readme"
+}
